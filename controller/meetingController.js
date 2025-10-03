@@ -93,45 +93,36 @@ export const createMeeting = async (req, res) => {
 export const allocateStudents = async (req, res) => {
   try {
     const { studentIds } = req.body;
-
-    if (!studentIds || !studentIds.length) {
+    if (!studentIds?.length)
       return res.status(400).json({ message: "studentIds required" });
-    }
 
-    // 1️⃣ Fetch the meeting
     const meeting = await Meeting.findById(req.params.id);
     if (!meeting) return res.status(404).json({ message: "Meeting not found" });
 
     meeting.students = meeting.students || [];
-
-    // 2️⃣ Fetch students to allocate
     const students = await User.find({ _id: { $in: studentIds }, role: "student" });
     if (!students.length) return res.status(400).json({ message: "No valid students found" });
 
     const emailResults = [];
     const allocatedStudents = [];
 
-    // 3️⃣ Loop through students
+    // Send emails in sequence (safe for small-medium batches)
     for (const student of students) {
       const alreadyAllocated = meeting.students.some(
-        (s) => s.studentId.toString() === student._id.toString()
+        s => s.studentId.toString() === student._id.toString()
       );
-
       if (alreadyAllocated) {
         emailResults.push({ student: student.email, status: "Already allocated" });
         continue;
       }
 
-      // Allocate student
       meeting.students.push({ studentId: student._id });
       allocatedStudents.push(student._id);
 
-      // Generate a dummy meeting link
-      const meetingLink = `https://dummy-meeting.com/${Math.random().toString(36).slice(2, 10)}`;
+      const meetingLink = `https://dummy-meeting.com/${Math.random().toString(36).slice(2,10)}`;
 
-      // 4️⃣ Prepare email
       const mailOptions = {
-        from: `"Admin" <${process.env.EMAIL_USER}>`,
+        from: `"Flareminds Admin" <${process.env.EMAIL_USER}>`,
         to: student.email,
         subject: `Meeting Allocation: ${meeting.className}`,
         html: `
@@ -149,24 +140,22 @@ export const allocateStudents = async (req, res) => {
         `,
       };
 
-      // 5️⃣ Send email
       try {
         await transporter.sendMail(mailOptions);
         emailResults.push({ student: student.email, status: "Email sent" });
-        console.log(`✅ Email sent to ${student.email}`);
 
-        // Clear rawPassword if it was sent
         if (student.rawPassword) {
           student.rawPassword = undefined;
           await student.save();
         }
+
+        console.log(`✅ Email sent to ${student.email}`);
       } catch (err) {
         emailResults.push({ student: student.email, status: "Failed", error: err.message });
         console.error(`❌ Failed to send email to ${student.email}:`, err.message);
       }
     }
 
-    // 6️⃣ Save meeting with new allocations
     await meeting.save();
 
     res.json({
@@ -180,6 +169,7 @@ export const allocateStudents = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
 // export const allocateStudents = async (req, res) => {
 //   try {
 //     const { studentIds } = req.body;
