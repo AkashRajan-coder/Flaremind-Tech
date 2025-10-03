@@ -90,9 +90,6 @@ export const createMeeting = async (req, res) => {
 
 
 // allocated student
-const generateMeetingLink = () =>
-  `https://dummy-meeting.com/${Math.random().toString(36).substring(2, 10)}`;
-
 export const allocateStudents = async (req, res) => {
   try {
     const { studentIds } = req.body;
@@ -119,57 +116,56 @@ export const allocateStudents = async (req, res) => {
         continue;
       }
 
-      const meetingLink = generateMeetingLink();
+      // Generate dummy meeting link
+      const dummyLink = `https://dummy-meeting.com/${Math.random().toString(36).substring(2, 10)}`;
 
       // Allocate student
       meeting.students.push({ studentId: student._id });
       allocatedStudents.push(student._id);
 
       try {
-        // Determine email content
-        const isFirstMeeting = !!student.rawPassword;
-        const subject = isFirstMeeting
-          ? `Meeting Invitation: ${meeting.className}`
-          : `New Meeting Allocated: ${meeting.className}`;
+        // Send first email with password if it exists
+        if (student.rawPassword) {
+          await transporter.sendMail({
+            from: `"Admin" <${process.env.EMAIL_USER}>`,
+            to: student.email,
+            subject: `Meeting Invitation: ${meeting.className}`,
+            html: `
+              <p>Hello <b>${student.FirstName}</b>,</p>
+              <p>You have been allocated to the meeting:</p>
+              <ul>
+                <li>Class: ${meeting.className}</li>
+                <li>Date: ${meeting.date.toDateString()}</li>
+                <li>Meeting Link: <a href="${dummyLink}">${dummyLink}</a></li>
+                <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
+                <li><b>Duration:</b> ${meeting.duration} minutes</li>
+                <li>Password: ${student.rawPassword}</li>
+              </ul>
+              <p>Please login using this password.</p>
+            `,
+          });
 
-        const html = isFirstMeeting
-          ? `
-            <p>Hello <b>${student.FirstName}</b>,</p>
-            <p>You have been allocated to the meeting:</p>
-            <ul>
-              <li>Class: ${meeting.className}</li>
-              <li>Date: ${meeting.date.toDateString()}</li>
-              <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
-              <li>Meeting Link: <a href="${meetingLink}">${meetingLink}</a></li>
-              <li><b>Duration:</b> ${meeting.duration} minutes</li>
-              <li>Password: ${student.rawPassword}</li>
-            </ul>
-            <p>Please login using this password.</p>
-          `
-          : `
-            <p>Hello <b>${student.FirstName}</b>,</p>
-            <p>You have been allocated to a new meeting:</p>
-            <ul>
-              <li>Class: ${meeting.className}</li>
-              <li>Date: ${meeting.date.toDateString()}</li>
-              <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
-              <li><b>Duration:</b> ${meeting.duration} minutes</li>
-              <li>Meeting Link: <a href="${meetingLink}">${meetingLink}</a></li>
-            </ul>
-            <p>Please login to view details.</p>
-          `;
-
-        await transporter.sendMail({
-          from: `"Admin" <${process.env.RESEND_SENDER}>`, // Must be verified in Resend
-          to: student.email,
-          subject,
-          html,
-        });
-
-        // Clear rawPassword after sending first meeting
-        if (isFirstMeeting) {
+          // Clear rawPassword after first email
           student.rawPassword = undefined;
           await student.save();
+        } else {
+          // Subsequent notifications
+          await transporter.sendMail({
+            from: `"Admin" <${process.env.EMAIL_USER}>`,
+            to: student.email,
+            subject: `New Meeting Allocated: ${meeting.className}`,
+            html: `
+              <p>Hello <b>${student.FirstName}</b>,</p>
+              <p>You have been allocated to a new meeting:</p>
+              <ul>
+                <li>Class: ${meeting.className}</li>
+                <li>Date: ${meeting.date.toDateString()}</li>
+                <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
+                <li><b>Duration:</b> ${meeting.duration} minutes</li>
+              </ul>
+              <p>Please login to view details.</p>
+            `,
+          });
         }
 
         emailResults.push({ student: student.email, status: "Email sent" });
