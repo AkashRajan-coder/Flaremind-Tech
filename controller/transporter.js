@@ -5,16 +5,20 @@ dotenv.config(); // Load .env
 
 // ✅ Gmail SMTP transporter for Render
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",  // Gmail SMTP server
-  port: 587,               // Must use 587 for TLS on Render
-  secure: false,           // false for port 587
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // false for TLS
   auth: {
-    user: process.env.EMAIL_USER, // Your Gmail
-    pass: process.env.EMAIL_PASS, // Gmail App Password
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
   logger: true,
   debug: true,
+  tls: {
+    rejectUnauthorized: false // Prevents certificate errors on cloud hosts
+  }
 });
+
 
 // Verify connection
 transporter.verify()
@@ -22,3 +26,4 @@ transporter.verify()
   .catch((err) => console.error("❌ SMTP connection error:", err));
 
 export default transporter;
+
