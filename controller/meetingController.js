@@ -116,7 +116,7 @@ export const allocateStudents = async (req, res) => {
         continue;
       }
 
-      // Generate dummy meeting link
+      // Generate a dummy meeting link
       const dummyLink = `https://dummy-meeting.com/${Math.random().toString(36).substring(2, 10)}`;
 
       // Allocate student
@@ -124,53 +124,54 @@ export const allocateStudents = async (req, res) => {
       allocatedStudents.push(student._id);
 
       try {
-        // Send first email with password if it exists
-        if (student.rawPassword) {
-          await transporter.sendMail({
-            from: `"Admin" <${process.env.EMAIL_USER}>`,
-            to: student.email,
-            subject: `Meeting Invitation: ${meeting.className}`,
-            html: `
-              <p>Hello <b>${student.FirstName}</b>,</p>
-              <p>You have been allocated to the meeting:</p>
-              <ul>
-                <li>Class: ${meeting.className}</li>
-                <li>Date: ${meeting.date.toDateString()}</li>
-                <li>Meeting Link: <a href="${dummyLink}">${dummyLink}</a></li>
-                <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
-                <li><b>Duration:</b> ${meeting.duration} minutes</li>
-                <li>Password: ${student.rawPassword}</li>
-              </ul>
-              <p>Please login using this password.</p>
-            `,
-          });
+        let mailOptions = {
+          from: `"Admin" <${process.env.EMAIL_USER}>`,
+          to: student.email,
+          subject: "",
+          html: ""
+        };
 
-          // Clear rawPassword after first email
+        if (student.rawPassword) {
+          // First meeting email with password
+          mailOptions.subject = `Meeting Invitation: ${meeting.className}`;
+          mailOptions.html = `
+            <p>Hello <b>${student.FirstName}</b>,</p>
+            <p>You have been allocated to the meeting:</p>
+            <ul>
+              <li>Class: ${meeting.className}</li>
+              <li>Date: ${meeting.date.toDateString()}</li>
+              <li>Meeting Link: <a href="${dummyLink}">${dummyLink}</a></li>
+              <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
+              <li>Duration: ${meeting.duration} minutes</li>
+              <li>Password: ${student.rawPassword}</li>
+            </ul>
+            <p>Please login using this password.</p>
+          `;
+          // Clear rawPassword after sending
           student.rawPassword = undefined;
           await student.save();
         } else {
-          // Subsequent notifications
-          await transporter.sendMail({
-            from: `"Admin" <${process.env.EMAIL_USER}>`,
-            to: student.email,
-            subject: `New Meeting Allocated: ${meeting.className}`,
-            html: `
-              <p>Hello <b>${student.FirstName}</b>,</p>
-              <p>You have been allocated to a new meeting:</p>
-              <ul>
-                <li>Class: ${meeting.className}</li>
-                <li>Date: ${meeting.date.toDateString()}</li>
-                <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
-                <li><b>Duration:</b> ${meeting.duration} minutes</li>
-              </ul>
-              <p>Please login to view details.</p>
-            `,
-          });
+          // Subsequent meeting notifications
+          mailOptions.subject = `New Meeting Allocated: ${meeting.className}`;
+          mailOptions.html = `
+            <p>Hello <b>${student.FirstName}</b>,</p>
+            <p>You have been allocated to a new meeting:</p>
+            <ul>
+              <li>Class: ${meeting.className}</li>
+              <li>Date: ${meeting.date.toDateString()}</li>
+              <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
+              <li>Duration: ${meeting.duration} minutes</li>
+            </ul>
+            <p>Please login to view details.</p>
+          `;
         }
 
+        await transporter.sendMail(mailOptions);
         emailResults.push({ student: student.email, status: "Email sent" });
+        console.log(`✅ Email sent to ${student.email}`);
       } catch (err) {
         emailResults.push({ student: student.email, status: "Failed", error: err.message });
+        console.error(`❌ Failed to send email to ${student.email}:`, err.message);
       }
     }
 
@@ -183,6 +184,7 @@ export const allocateStudents = async (req, res) => {
       emailResults,
     });
   } catch (err) {
+    console.error("❌ Error in allocateStudents:", err);
     res.status(500).json({ message: err.message });
   }
 };
