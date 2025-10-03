@@ -3,13 +3,14 @@ import dotenv from "dotenv";
 
 dotenv.config(); // Load .env
 
+// ✅ Gmail SMTP transporter for Render
 const transporter = nodemailer.createTransport({
-  host: "smtp.resend.com",      // Changed from Gmail
-  port: 587,                     // Standard TLS port
-  secure: false,                 // false for port 587
+  host: "smtp.gmail.com",  // Gmail SMTP server
+  port: 587,               // Must use 587 for TLS on Render
+  secure: false,           // false for port 587
   auth: {
-    user: "resend",              // Resend requires this literal value
-    pass: process.env.RESEND_API_KEY, // Your Resend API key
+    user: process.env.EMAIL_USER, // Your Gmail
+    pass: process.env.EMAIL_PASS, // Gmail App Password
   },
   logger: true,
   debug: true,
@@ -17,7 +18,7 @@ const transporter = nodemailer.createTransport({
 
 // Verify connection
 transporter.verify()
-  .then(() => console.log("✅ Mail server ready (Resend)"))
-  .catch(console.error);
+  .then(() => console.log("✅ Gmail SMTP ready on Render"))
+  .catch((err) => console.error("❌ SMTP connection error:", err));
 
-export default transporter; // Keep ES module export
+export default transporter;
