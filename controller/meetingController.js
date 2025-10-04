@@ -189,20 +189,24 @@ export const createMeeting = async (req, res) => {
 export const allocateStudents = async (req, res) => {
   try {
     const { studentIds } = req.body;
-
-    if (!studentIds || !studentIds.length)
+    if (!studentIds || !studentIds.length) {
       return res.status(400).json({ message: "studentIds required" });
+    }
 
+    // 1️⃣ Fetch the meeting
     const meeting = await Meeting.findById(req.params.id);
     if (!meeting) return res.status(404).json({ message: "Meeting not found" });
 
     meeting.students = meeting.students || [];
+
+    // 2️⃣ Fetch students to allocate
     const students = await User.find({ _id: { $in: studentIds }, role: "student" });
     if (!students.length) return res.status(400).json({ message: "No valid students found" });
 
     const emailResults = [];
     const allocatedStudents = [];
 
+    // 3️⃣ Loop through students
     for (const student of students) {
       const alreadyAllocated = meeting.students.some(
         (s) => s.studentId.toString() === student._id.toString()
@@ -212,11 +216,14 @@ export const allocateStudents = async (req, res) => {
         continue;
       }
 
+      // Allocate student
       meeting.students.push({ studentId: student._id });
       allocatedStudents.push(student._id);
 
+      // Generate a dummy meeting link
       const meetingLink = `https://dummy-meeting.com/${Math.random().toString(36).slice(2, 10)}`;
 
+      // 4️⃣ Prepare HTML email
       const html = `
         <p>Hello <b>${student.FirstName}</b>,</p>
         <p>You have been allocated to a meeting:</p>
@@ -231,19 +238,27 @@ export const allocateStudents = async (req, res) => {
         <p>Please login to view details.</p>
       `;
 
+      // 5️⃣ Send email using Resend
       const result = await sendMail({
         to: student.email,
         subject: `Meeting Allocation: ${meeting.className}`,
         html,
       });
 
-      emailResults.push({ student: student.email, status: result.success ? "Email sent" : "Failed" });
+      emailResults.push({
+        student: student.email,
+        status: result.success ? "Email sent" : "Failed",
+        error: result.success ? undefined : result.error,
+      });
+
+      // Clear rawPassword if it was sent
       if (student.rawPassword) {
         student.rawPassword = undefined;
         await student.save();
       }
     }
 
+    // 6️⃣ Save meeting with new allocations
     await meeting.save();
 
     res.json({
@@ -256,6 +271,7 @@ export const allocateStudents = async (req, res) => {
     console.error("❌ Error in allocateStudents:", err);
     res.status(500).json({ message: err.message });
   }
+};
 };
 // export const allocateStudents = async (req, res) => {
 //   try {
