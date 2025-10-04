@@ -1,9 +1,9 @@
 import  Meeting from "../Model/meet.js";
 import User from "../Model/userSchema.js";
-// import transporter from "./transporter.js";
-// import nodemailer from "nodemailer";
+import transporter from "./transporter.js";
+import nodemailer from "nodemailer";
 import crypto from "crypto";
-import { sendMail } from "../controller/transporter.js";
+// import { sendMail } from "../controller/transporter.js";
 // Helper: parse 12-hour AM/PM time
 function parseAMPM(time) {
   if (!time) return null;
@@ -91,6 +91,101 @@ export const createMeeting = async (req, res) => {
 
 
 // allocated student
+export const allocateStudents = async (req, res) => {
+  try {
+    const { studentIds } = req.body;
+    if (!studentIds || !studentIds.length)
+      return res.status(400).json({ message: "studentIds required" });
+
+    const meeting = await Meeting.findById(req.params.id);
+    if (!meeting) return res.status(404).json({ message: "Meeting not found" });
+
+    meeting.students = meeting.students || [];
+    const students = await User.find({ _id: { $in: studentIds }, role: "student" });
+    if (!students.length) return res.status(400).json({ message: "No valid students found" });
+
+    const emailResults = [];
+    const allocatedStudents = [];
+
+    for (let student of students) {
+      const alreadyAdded = meeting.students.find(
+        (s) => s.studentId.toString() === student._id.toString()
+      );
+
+      if (alreadyAdded) {
+        emailResults.push({ student: student.email, status: "Already allocated" });
+        continue;
+      }
+       // Generate dummy meeting link for this student
+      const dummyLink = `https://dummy-meeting.com/${Math.random().toString(36).substring(2, 10)}`;
+
+      // Allocate student
+      meeting.students.push({ studentId: student._id });
+      allocatedStudents.push(student._id);
+
+      try {
+        // If rawPassword exists, this is first meeting → send password
+        if (student.rawPassword) {
+          await transporter.sendMail({
+            from: `"Admin" <${process.env.EMAIL_USER}>`,
+            to: student.email,
+            subject: `Meeting Invitation: ${meeting.className}`,
+            html: `
+              <p>Hello <b>${student.FirstName}</b>,</p>
+              <p>You have been allocated to the meeting:</p>
+              <ul>
+                <li>Class: ${meeting.className}</li>
+                <li>Date: ${meeting.date.toDateString()}</li>
+                <li>Meeting Link: <a href="${dummyLink}">${dummyLink}</a></li>
+                <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
+                 <li><b>Duration:</b> ${meeting.duration} minutes</li>
+                <li>Password: ${student.rawPassword}</li>
+              </ul>
+              <p>Please login using this password.</p>
+            `,
+          });
+
+          // Clear rawPassword after first email
+          student.rawPassword = undefined;
+          await student.save();
+        } else {
+          // Subsequent meetings → only send notification
+          await transporter.sendMail({
+            from: `"Admin" <${process.env.EMAIL_USER}>`,
+            to: student.email,
+            subject: `New Meeting Allocated: ${meeting.className}`,
+            html: `
+              <p>Hello <b>${student.FirstName}</b>,</p>
+              <p>You have been allocated to a new meeting:</p>
+              <ul>
+                <li>Class: ${meeting.className}</li>
+                <li>Date: ${meeting.date.toDateString()}</li>
+                <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
+                 <li><b>Duration:</b> ${meeting.duration} minutes</li>
+              </ul>
+              <p>Please login to view details.</p>
+            `,
+          });
+        }
+
+        emailResults.push({ student: student.email, status: "Email sent" });
+      } catch (err) {
+        emailResults.push({ student: student.email, status: "Failed", error: err.message });
+      }
+    }
+
+    await meeting.save();
+
+    res.json({
+      message: "Student allocation completed",
+      meetingId: meeting._id,
+      allocatedCount: allocatedStudents.length,
+      emailResults,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 // export const allocateStudents = async (req, res) => {
 //   try {
 //     const { studentIds } = req.body;
@@ -116,7 +211,8 @@ export const createMeeting = async (req, res) => {
 //         emailResults.push({ student: student.email, status: "Already allocated" });
 //         continue;
 //       }
-//        // Generate dummy meeting link for this student
+
+//       // Generate dummy meeting link
 //       const dummyLink = `https://dummy-meeting.com/${Math.random().toString(36).substring(2, 10)}`;
 
 //       // Allocate student
@@ -124,50 +220,46 @@ export const createMeeting = async (req, res) => {
 //       allocatedStudents.push(student._id);
 
 //       try {
-//         // If rawPassword exists, this is first meeting → send password
-//         if (student.rawPassword) {
-//           await transporter.sendMail({
-//             from: `"Admin" <${process.env.EMAIL_USER}>`,
-//             to: student.email,
-//             subject: `Meeting Invitation: ${meeting.className}`,
-//             html: `
-//               <p>Hello <b>${student.FirstName}</b>,</p>
-//               <p>You have been allocated to the meeting:</p>
-//               <ul>
-//                 <li>Class: ${meeting.className}</li>
-//                 <li>Date: ${meeting.date.toDateString()}</li>
-//                 <li>Meeting Link: <a href="${dummyLink}">${dummyLink}</a></li>
-//                 <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
-//                  <li><b>Duration:</b> ${meeting.duration} minutes</li>
-//                 <li>Password: ${student.rawPassword}</li>
-//               </ul>
-//               <p>Please login using this password.</p>
-//             `,
-//           });
+//         let emailSubject, emailText;
 
-//           // Clear rawPassword after first email
+//         if (student.rawPassword) {
+//           // First meeting → send password
+//           emailSubject = `Meeting Invitation: ${meeting.className}`;
+//           emailText = `
+// Hello ${student.FirstName},
+
+// You have been allocated to the meeting:
+
+// Class: ${meeting.className}
+// Date: ${meeting.date.toDateString()}
+// Meeting Link: ${dummyLink}
+// Time: ${meeting.startTime} - ${meeting.endTime}
+// Duration: ${meeting.duration} minutes
+// Password: ${student.rawPassword}
+
+// Please login using this password.
+//           `;
 //           student.rawPassword = undefined;
 //           await student.save();
 //         } else {
-//           // Subsequent meetings → only send notification
-//           await transporter.sendMail({
-//             from: `"Admin" <${process.env.EMAIL_USER}>`,
-//             to: student.email,
-//             subject: `New Meeting Allocated: ${meeting.className}`,
-//             html: `
-//               <p>Hello <b>${student.FirstName}</b>,</p>
-//               <p>You have been allocated to a new meeting:</p>
-//               <ul>
-//                 <li>Class: ${meeting.className}</li>
-//                 <li>Date: ${meeting.date.toDateString()}</li>
-//                 <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
-//                  <li><b>Duration:</b> ${meeting.duration} minutes</li>
-//               </ul>
-//               <p>Please login to view details.</p>
-//             `,
-//           });
+//           // Subsequent meetings → notification only
+//           emailSubject = `New Meeting Allocated: ${meeting.className}`;
+//           emailText = `
+// Hello ${student.FirstName},
+
+// You have been allocated to a new meeting:
+
+// Class: ${meeting.className}
+// Date: ${meeting.date.toDateString()}
+// Time: ${meeting.startTime} - ${meeting.endTime}
+// Duration: ${meeting.duration} minutes
+
+// Please login to view details.
+//           `;
 //         }
 
+//         // Render-compatible email sending
+//         await sendMail({ to: student.email, subject: emailSubject, text: emailText });
 //         emailResults.push({ student: student.email, status: "Email sent" });
 //       } catch (err) {
 //         emailResults.push({ student: student.email, status: "Failed", error: err.message });
@@ -186,93 +278,6 @@ export const createMeeting = async (req, res) => {
 //     res.status(500).json({ message: err.message });
 //   }
 // };
-export const allocateStudents = async (req, res) => {
-  try {
-    const { studentIds } = req.body;
-    if (!studentIds || !studentIds.length) {
-      return res.status(400).json({ message: "studentIds required" });
-    }
-
-    // 1️⃣ Fetch the meeting
-    const meeting = await Meeting.findById(req.params.id);
-    if (!meeting) return res.status(404).json({ message: "Meeting not found" });
-
-    meeting.students = meeting.students || [];
-
-    // 2️⃣ Fetch students to allocate
-    const students = await User.find({ _id: { $in: studentIds }, role: "student" });
-    if (!students.length) return res.status(400).json({ message: "No valid students found" });
-
-    const emailResults = [];
-    const allocatedStudents = [];
-
-    // 3️⃣ Loop through students
-    for (const student of students) {
-      const alreadyAllocated = meeting.students.some(
-        (s) => s.studentId.toString() === student._id.toString()
-      );
-      if (alreadyAllocated) {
-        emailResults.push({ student: student.email, status: "Already allocated" });
-        continue;
-      }
-
-      // Allocate student
-      meeting.students.push({ studentId: student._id });
-      allocatedStudents.push(student._id);
-
-      // Generate a dummy meeting link
-      const meetingLink = `https://dummy-meeting.com/${Math.random().toString(36).slice(2, 10)}`;
-
-      // 4️⃣ Prepare HTML email
-      const html = `
-        <p>Hello <b>${student.FirstName}</b>,</p>
-        <p>You have been allocated to a meeting:</p>
-        <ul>
-          <li>Class: ${meeting.className}</li>
-          <li>Date: ${meeting.date.toDateString()}</li>
-          <li>Time: ${meeting.startTime} - ${meeting.endTime}</li>
-          <li>Duration: ${meeting.duration} minutes</li>
-          <li>Meeting Link: <a href="${meetingLink}">${meetingLink}</a></li>
-          ${student.rawPassword ? `<li>Password: ${student.rawPassword}</li>` : ""}
-        </ul>
-        <p>Please login to view details.</p>
-      `;
-
-      // 5️⃣ Send email using Resend
-      const result = await sendMail({
-        to: student.email,
-        subject: `Meeting Allocation: ${meeting.className}`,
-        html,
-      });
-
-      emailResults.push({
-        student: student.email,
-        status: result.success ? "Email sent" : "Failed",
-        error: result.success ? undefined : result.error,
-      });
-
-      // Clear rawPassword if it was sent
-      if (student.rawPassword) {
-        student.rawPassword = undefined;
-        await student.save();
-      }
-    }
-
-    // 6️⃣ Save meeting with new allocations
-    await meeting.save();
-
-    res.json({
-      message: "Student allocation completed",
-      meetingId: meeting._id,
-      allocatedCount: allocatedStudents.length,
-      emailResults,
-    });
-  } catch (err) {
-    console.error("❌ Error in allocateStudents:", err);
-    res.status(500).json({ message: err.message });
-  }
-};
-
 // export const allocateStudents = async (req, res) => {
 //   try {
 //     const { studentIds } = req.body;
