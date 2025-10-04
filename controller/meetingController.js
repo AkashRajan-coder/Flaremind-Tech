@@ -1,6 +1,6 @@
 import  Meeting from "../Model/meet.js";
 import User from "../Model/userSchema.js";
-import transporter from "./transporter.js";
+// import transporter from "./transporter.js";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 // import { sendMail } from "../controller/transporter.js";
