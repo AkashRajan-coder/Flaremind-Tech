@@ -1,6 +1,6 @@
 import  Meeting from "../Model/meet.js";
 import User from "../Model/userSchema.js";
- import transporter from "./transporter.js";
+import transporter from "./transporter.js";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 // import { sendMail } from "../controller/transporter.js";
@@ -83,6 +83,14 @@ export const createMeeting = async (req, res) => {
 };
 
 
+
+
+
+
+
+
+
+// allocated student
 export const allocateStudents = async (req, res) => {
   try {
     const { studentIds } = req.body;
@@ -119,7 +127,7 @@ export const allocateStudents = async (req, res) => {
         // If rawPassword exists, this is first meeting → send password
         if (student.rawPassword) {
           await transporter.sendMail({
-            from: `"Admin" <${process.env.EMAIL_USER}>`,
+            from: `"Admin" <${process.env.SMTP_USER}>`,
             to: student.email,
             subject: `Meeting Invitation: ${meeting.className}`,
             html: `
@@ -143,7 +151,7 @@ export const allocateStudents = async (req, res) => {
         } else {
           // Subsequent meetings → only send notification
           await transporter.sendMail({
-            from: `"Admin" <${process.env.EMAIL_USER}>`,
+            from: `"Admin" <${process.env.SMTP_USER}>`,
             to: student.email,
             subject: `New Meeting Allocated: ${meeting.className}`,
             html: `
@@ -178,14 +186,6 @@ export const allocateStudents = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
-
-
-
-
-
-// allocated student
-
 // export const allocateStudents = async (req, res) => {
 //   try {
 //     const { studentIds } = req.body;
@@ -476,7 +476,7 @@ export const rescheduleMeeting = async (req, res) => {
       const student = sObj.studentId;
       try {
         await transporter.sendMail({
-          from: `"Admin" <${process.env.EMAIL_USER}>`,
+          from: `"Admin" <${process.env.SMTP_USER}>`,
           to: student.email,
           subject: `Rescheduled: ${meeting.className}`,
           html: `
