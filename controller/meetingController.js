@@ -83,14 +83,6 @@ export const createMeeting = async (req, res) => {
 };
 
 
-
-
-
-
-
-
-
-// allocated student
 export const allocateStudents = async (req, res) => {
   try {
     const { studentIds } = req.body;
@@ -186,6 +178,14 @@ export const allocateStudents = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+
+
+
+
+
+// allocated student
+
 // export const allocateStudents = async (req, res) => {
 //   try {
 //     const { studentIds } = req.body;
